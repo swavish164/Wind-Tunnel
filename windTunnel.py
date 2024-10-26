@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from scipy.ndimage import convolve
 
 # Domain size and parameters
-nx, ny = 200, 150    
+nx, ny = 200, 100    
 dx, dy = 1.0, 1.0  
 nt = 500          
 dt = 0.01          
@@ -50,22 +50,18 @@ inletHeight = ny // 3
 inletStart = (ny - inletHeight) // 3
 inletEnd = (inletStart + inletHeight) 
 
-# Create parabolic velocity profile for the inlet
 y_inlet = np.linspace(-1, 1, inletHeight)
-vx[inletStart:inletEnd, 0] = 2.0 * (1 - y_inlet**2)  # horizontal velocity at inlet
+vx[inletStart:inletEnd, 0] = 1.0 * (1 - y_inlet**2)  # horizontal velocity at inlet
 vy[inletStart:inletEnd, 0] = 0.0  # zero vertical component at inlet
 
-# Outlet conditions
 vx[:, -1] = 0.0  # Prevent any inflow by setting outlet velocity to zero
 vy[:, -1] = 0.0  # Ensure no vertical flow at the outlet
 
-# Set no-flow conditions on top and bottom walls
-vx[0, :] = 0.0  # Top wall
-vy[0, :] = 0.0  # Top wall
-vx[-1, :] = 0.0  # Bottom wall
-vy[-1, :] = 0.0  # Bottom wall
+vx[0, :] = 1 # Top wall
+vy[0, :] = 1  # Top wall
+vx[-1, :] = 1  # Bottom wall
+vy[-1, :] = 1  # Bottom wall
 
-# Apply wall boundary conditions on airfoil
 vx[airfoil_mask == 1] = 0
 vy[airfoil_mask == 1] = 0
 
@@ -126,7 +122,8 @@ def runge_kutta(px, py, vx, vy, dt):
         px2[i] += (k1x + 2 * k2x + 2 * k3x + k4x) / 6
         py2[i] += (k1y + 2 * k2y + 2 * k3y + k4y) / 6
     return px2, py2
-fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+    
+
 # Main time-stepping loop
 for t in range(nt):
     vx, vy = compute_velocity(vx, vy, p, dt, viscosity)
@@ -138,30 +135,23 @@ for t in range(nt):
     vy[airfoil_mask == 1] = 0
 
     # Ensure walls do not allow for any inflow
-    vx[0, :] = 0.0  # No flow at top
-    vx[-1, :] = 0.0  # No flow at bottom
+    vx[0, :] = 1  # No flow at top
+    vx[-1, :] = 1  # No flow at bottom
     vy[:, 0] = 0.0  # No vertical flow at left
-    vy[:, -1] = 0.0  # No vertical flow at right
 
     if t % 20 == 0:
-        # Plot Velocity Magnitude
-        velocity_magnitude = np.sqrt(vx**2 + vy**2)
-        im1 = axs[0].imshow(velocity_magnitude, cmap='viridis', origin='lower')
-        axs[0].set_title('Velocity Magnitude')
-        axs[0].set_xlabel('X Position')
-        axs[0].set_ylabel('Y Position')
-        if 'cb1' in locals(): cb1.remove()  # Remove old colorbar if it exists
-        cb1 = plt.colorbar(im1, ax=axs[0])  # Create colorbar for the velocity plot
-
-        # Plot Pressure Field
-        im2 = axs[1].imshow(p, cmap='viridis', origin='lower')
-        axs[1].set_title('Pressure Field')
-        axs[1].set_xlabel('X Position')
-        if 'cb2' in locals(): cb2.remove()  # Remove old colorbar if it exists
-        cb2 = plt.colorbar(im2, ax=axs[1])  # Create colorbar for the pressure plot
-
-        plt.suptitle(f"Time = {t * dt:.2f} s")
+        plt.clf()
+        plt.imshow(np.sqrt(vx**2 + vy**2), cmap='viridis')
+        plt.title(f"Velocity Magnitude at t={t*dt:.2f}")
+        plt.colorbar()
+        
+        plt.subplot(1, 2, 2)
+        plt.imshow(p, cmap='viridis', origin='lower')
+        plt.title(f"Pressure Field at t={t * dt:.2f}")
+        plt.colorbar(label='Pressure')
         plt.pause(0.01)
+        
+        
 
 plt.ioff()
 plt.show()
