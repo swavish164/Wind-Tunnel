@@ -57,10 +57,10 @@ vy[inletStart:inletEnd, 0] = 0.0  # zero vertical component at inlet
 vx[:, -1] = 0.0  # Prevent any inflow by setting outlet velocity to zero
 vy[:, -1] = 0.0  # Ensure no vertical flow at the outlet
 
-vx[0, :] = 1 # Top wall
-vy[0, :] = 1  # Top wall
-vx[-1, :] = 1  # Bottom wall
-vy[-1, :] = 1  # Bottom wall
+vx[0, :] = 0.0  # Top wall
+vy[0, :] = 0.0  # Top wall
+vx[-1, :] = 0.0  # Bottom wall
+vy[-1, :] = 0.0  # Bottom wall
 
 vx[airfoil_mask == 1] = 0
 vy[airfoil_mask == 1] = 0
@@ -135,8 +135,8 @@ for t in range(nt):
     vy[airfoil_mask == 1] = 0
 
     # Ensure walls do not allow for any inflow
-    vx[0, :] = 1  # No flow at top
-    vx[-1, :] = 1  # No flow at bottom
+    vx[0, :] = 0.0  # No flow at top
+    vx[-1, :] = 0.0  # No flow at bottom
     vy[:, 0] = 0.0  # No vertical flow at left
 
     if t % 20 == 0:
