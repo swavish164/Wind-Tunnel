@@ -3,7 +3,6 @@ import cv2 as cv
 from matplotlib import pyplot as plt
 from scipy.ndimage import convolve
 
-# Domain size and parameters
 nx, ny = 200, 100    
 dx, dy = 1.0, 1.0  
 nt = 500          
@@ -11,7 +10,6 @@ dt = 0.01
 viscosity = 0.01    
 ar = 5
 
-# Load and process the airfoil image
 image = cv.imread('f1CarSide.jpg')
 bw = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 blurred = cv.GaussianBlur(bw, (5, 5), 0)
@@ -40,42 +38,37 @@ top_left_x = (nx - resized_width) // 2
 airfoil_mask[top_left_y:top_left_y + resized_height, top_left_x:top_left_x + resized_width] = \
     (resized_filled_image > 0).astype(np.uint8)
 
-# Initialize velocity and pressure fields
 vx = np.zeros((ny, nx))
 vy = np.zeros((ny, nx))
 p = np.zeros((ny, nx))
 
-# Set inlet conditions - horizontal flow from the left side
 inletHeight = ny // 3
 inletStart = (ny - inletHeight) // 3
 inletEnd = (inletStart + inletHeight) 
 
 y_inlet = np.linspace(-1, 1, inletHeight)
-vx[inletStart:inletEnd, 0] = 1.0 * (1 - y_inlet**2)  # horizontal velocity at inlet
-vy[inletStart:inletEnd, 0] = 0.0  # zero vertical component at inlet
+vx[inletStart:inletEnd, 0] = 1.0 * (1 - y_inlet**2)  
+vy[inletStart:inletEnd, 0] = 0.0  
 
-vx[:, -1] = 0.0  # Prevent any inflow by setting outlet velocity to zero
-vy[:, -1] = 0.0  # Ensure no vertical flow at the outlet
+vx[:, -1] = 0.0  
+vy[:, -1] = 0.0  
 
-vx[0, :] = 0.0  # Top wall
-vy[0, :] = 0.0  # Top wall
-vx[-1, :] = 0.0  # Bottom wall
-vy[-1, :] = 0.0  # Bottom wall
+vx[0, :] = 0.0  
+vy[0, :] = 0.0  
+vx[-1, :] = 0.0  
+vy[-1, :] = 0.0  
 
 vx[airfoil_mask == 1] = 0
 vy[airfoil_mask == 1] = 0
 
-# Particle positions for visualization
 num_particles = 100
 px = np.random.rand(num_particles) * nx  
 py = np.random.rand(num_particles) * ny
 
-# Function to compute velocity based on pressure gradient
 def compute_velocity(vx, vy, p, dt, viscosity):
     dpdx, dpdy = np.gradient(p)
     vx -= dt * dpdx
     vy -= dt * dpdy
-    # Adding viscosity diffusion term
     laplacian_vx = convolve(vx, np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]]) / 4, mode='constant', cval=0)
     laplacian_vy = convolve(vy, np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]]) / 4, mode='constant', cval=0)
     vx += viscosity * laplacian_vx * dt
@@ -87,7 +80,6 @@ def divergence(vx, vy):
     dy = np.gradient(vy, axis=0)
     return dx + dy
 
-# Jacobi iterative method for pressure correction
 J = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / 4
 
 
@@ -124,20 +116,17 @@ def runge_kutta(px, py, vx, vy, dt):
     return px2, py2
     
 
-# Main time-stepping loop
 for t in range(nt):
     vx, vy = compute_velocity(vx, vy, p, dt, viscosity)
     p = compute_pressure(p, vx, vy)
     px, py = runge_kutta(px, py, vx, vy, dt)
 
-    # Resetting boundary conditions after velocity updates
     vx[airfoil_mask == 1] = 0
     vy[airfoil_mask == 1] = 0
 
-    # Ensure walls do not allow for any inflow
-    vx[0, :] = 0.0  # No flow at top
-    vx[-1, :] = 0.0  # No flow at bottom
-    vy[:, 0] = 0.0  # No vertical flow at left
+    vx[0, :] = 0.0 
+    vx[-1, :] = 0.0 
+    vy[:, 0] = 0.0  
 
     if t % 20 == 0:
         plt.clf()
