@@ -6,9 +6,9 @@ from scipy.ndimage import convolve
 # Grid and simulation parameters
 nx, ny = 500, 200    
 dx, dy = 1.0, 1.0  
-nt = 300          
+nt = 200          
 dt = 0.02         
-viscosity = 0.1    
+viscosity = 0.01    
 
 # Load and process image
 image = cv.imread('f1CarSide.jpg')
@@ -22,7 +22,7 @@ contours, _ = cv.findContours(closed_edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SI
 filled_image = np.zeros_like(bw)
 cv.drawContours(filled_image, contours, -1, 255, thickness=cv.FILLED)
 
-def imageResize(image, max_height, max_width):
+def image_resize(image, max_height, max_width):
     height, width = image.shape[:2]
     scale = min(max_height / height, max_width / width*0.75)
     new_size = (int(width * scale), int(height * scale))
@@ -30,7 +30,7 @@ def imageResize(image, max_height, max_width):
 
 # Resize and floor-align the car mask
 max_airfoil_height, max_airfoil_width = int(0.5 * ny), int(0.8 * nx)
-resized = imageResize(filled_image, max_airfoil_height, max_airfoil_width)
+resized = image_resize(filled_image, max_airfoil_height, max_airfoil_width)
 resized = (resized > 0).astype(np.uint8)
 
 # Flip resized mask vertically (so top of resized becomes bottom)
@@ -100,9 +100,7 @@ def divergence(vx, vy,mask):
 def compute_pressure(p, vx, vy, tol=1e-5):
     rhs = -divergence(vx, vy, fluid_mask)
     for _ in range(200):
-        p_new = convolve(p, np.array([[0, 1, 0],
-                                      [1, 0, 1],
-                                      [0, 1, 0]])/4, mode='nearest')
+        p_new = convolve(p, np.array([[0, 1, 0],[1, 0, 1],[0, 1, 0]])/4, mode='nearest')
         p_new[fluid_mask] += rhs[fluid_mask] / 2
 
         # Neumann boundary conditions (zero normal gradient)
@@ -116,7 +114,7 @@ def compute_pressure(p, vx, vy, tol=1e-5):
 
         p[fluid_mask] = p_new[fluid_mask]
 
-    # Zero pressure inside the car (optional but cleaner)
+    # Zero pressure inside the car 
     p[~fluid_mask] = 0
 
     return p
@@ -134,13 +132,16 @@ def interpolate_velocity(x, y, vx, vy):
     fy = y - iy0
     # Interpolate velocity
     vx_val = (1-fx)*(1-fy)*vx[iy0, ix0] + fx*(1-fy)*vx[iy0, ix1] + \
-             (1-fx)*fy*vx[iy1, ix0] + fx*fy*vx[iy1, ix1]
+(1-fx)*fy*vx[iy1, ix0] + fx*fy*vx[iy1, ix1]
     
     vy_val = (1-fx)*(1-fy)*vy[iy0, ix0] + fx*(1-fy)*vy[iy0, ix1] + \
-             (1-fx)*fy*vy[iy1, ix0] + fx*fy*vy[iy1, ix1]
+(1-fx)*fy*vy[iy1, ix0] + fx*fy*vy[iy1, ix1]
     
     return vx_val, vy_val
-
+def reset():
+    vx[airfoil_mask == 1] = 0
+    vy[airfoil_mask == 1] = 0
+    
 def runge_kutta(px, py, vx, vy, dt):
     px_new, py_new = px.copy(), py.copy()
     
@@ -161,12 +162,12 @@ def runge_kutta(px, py, vx, vy, dt):
             px_new[i] += (k1x + 2*k2x + 2*k3x + k4x) / 6
             py_new[i] += (k1y + 2*k2y + 2*k3y + k4y) / 6
             
-            # If particle hits the car, make it swirl around
+            # If particle hits the car
             if (0 <= px_new[i] < nx and 0 <= py_new[i] < ny and 
                 airfoil_mask[int(py_new[i]), int(px_new[i])] == 1):
-                # Push particle back with some randomness
+                # Push particle back
                 px_new[i] = px[i] - 0.3*vx_p*dt
-                py_new[i] = py[i] - 0.3*vy_p*dt + np.random.uniform(-0.5, 0.5)
+                py_new[i] = py[i] - 0.3*vy_p*dt + np.random.Generator(-0.5, 0.5)
             ix = int(px_new[i])
             iy = int(py_new[i])
             if 0 <= ix < nx and 0 <= iy < ny and airfoil_mask[iy, ix] == 1:
@@ -177,15 +178,15 @@ def runge_kutta(px, py, vx, vy, dt):
                 px_new[i] = x + 0.5
                 py_new[i] = y
             
-            # If particle exits right boundary, recycle it to its intake
+            # If particle exits right boundary
             if px_new[i] >= nx + 20:
                 intake_idx = particle_intake[i]
                 x, y = intake_positions[intake_idx]
-                angles = np.random.uniform(-np.pi/2, np.pi/2)
+                angles = np.random.Generator(-np.pi/2, np.pi/2)
                 px_new[i] = x + 0.5 + 0.8 * (1 + np.cos(angles))
                 py_new[i] = y + 0.8 * np.sin(angles)
             
-            # If particle hits top/bottom, bounce it
+            # If particle hits top/bottomt
             if py_new[i] <= 0 or py_new[i] >= ny-1:
                 py_new[i] = np.clip(py_new[i], 0, ny-1)
                 vy_p *= -0.3  # Reverse vertical velocity with damping
@@ -199,9 +200,9 @@ def runge_kutta(px, py, vx, vy, dt):
 plt.figure(figsize=(12, 6))
 for t in range(nt):
     vx, vy = compute_velocity(vx, vy, p, dt, viscosity)
+    reset()
     p = compute_pressure(p, vx, vy)
-    vx[airfoil_mask == 1] = 0
-    vy[airfoil_mask == 1] = 0
+    reset()
     # For each point adjacent to the car boundary, set velocity to zero or mirror it to enforce no-slip
 
     # Left wall boundary - no flow through wall except at intakes
@@ -254,18 +255,24 @@ for t in range(nt):
             # Background velocity magnitude
         speed = np.sqrt(vx**2 + vy**2)
         speed[airfoil_mask == 1] = np.nan  # Hide car area
-        plt.imshow(speed, cmap='viridis', origin='lower', vmin=0, vmax=10.0)  # origin='lower' flips y-axis
+        plt.imshow(speed, cmap='viridis', origin='lower', vmin=0, vmax=10.0)
             
         plt.colorbar(label='Velocity Magnitude')
 
             # Car outline
         car_outline = np.ma.masked_where(airfoil_mask == 0, airfoil_mask)
-        plt.imshow(car_outline, cmap='Greys', origin='lower', alpha=0.7)  # also origin='lower'
+        plt.imshow(car_outline, cmap='Greys', origin='lower', alpha=0.7)  
             
             # Streamlines
         Y, X = np.mgrid[0:ny, 0:nx]
-        plt.streamplot(X, Y, vx, vy, color='white', linewidth=0.8, 
-                        density=1.0, arrowsize=0.6, minlength=0.5)
+        vx_masked = np.ma.array(vx, mask=airfoil_mask)
+        vy_masked = np.ma.array(vy, mask=airfoil_mask)
+
+        seed_y = np.linspace(0, ny - 1, 50)
+        start_points = np.array([[0, y] for y in seed_y if fluid_mask[int(y), 0]])
+
+        plt.streamplot(X, Y, vx_masked, vy_masked, color='white', linewidth=0.8, density=1.0, arrowsize=0.6, start_points=start_points)
+
             
             # Particles
         valid = particle_active & (px >= 0) & (px < nx) & (py >= 0) & (py < ny)
@@ -281,4 +288,3 @@ for t in range(nt):
         plt.draw()
 
 plt.show()
-
